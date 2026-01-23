@@ -28,6 +28,6 @@ te_ds_v = te_ds.dataset.get_v_ds()
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model.to(device)
-model.train_classifiers(tr_ds_a, te_ds_a, tr_ds_v, te_ds_v, epochs=5, lr=1e-3, device=device)
+model.train_classifiers(tr_ds_a, tr_ds_v, te_ds_a, te_ds_v, epochs=5, lr=1e-3, device=device)
 
 torch.save(model.state_dict(), f"./model_saves/av_bsquare.pth")
