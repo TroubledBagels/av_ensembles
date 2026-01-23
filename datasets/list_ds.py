@@ -142,7 +142,7 @@ if __name__ == '__main__':
         tonic.transforms.ToFrame(sensor_size=tonic.datasets.SHD.sensor_size, time_window=10000),
     ])
 
-    a_ds = hsd.SHD(save_to=ds_path_hsd, train=True, transform=a_transform)  # In form (data, label), with data being (time, neuron, p)
+    a_ds = hsd.SHD(save_to=ds_path_hsd, train=False, transform=a_transform)  # In form (data, label), with data being (time, neuron, p)
     label_set = set()
     label_counts = {}
     german_a_ds = []
@@ -158,7 +158,7 @@ if __name__ == '__main__':
     print(f"Audio dataset label counts: {label_counts}")
     print(f"Audio dataset length: {len(a_ds)}")
 
-    v_ds = nmnist.NMNIST(save_to=ds_path_nmnist, train=True, transform=v_transform)
+    v_ds = nmnist.NMNIST(save_to=ds_path_nmnist, train=False, transform=v_transform)
     v_ds = ListDataset(v_ds)
     v_ds.sort(key_func=lambda x: x[1])  # Sort by label
     print(f"Video dataset length: {len(v_ds)}")
@@ -187,7 +187,7 @@ if __name__ == '__main__':
     av_ds = AVDataset(a_ds, v_ds)
     print(f"AV dataset length: {len(av_ds)}")
 
-    save_loc = home + "/data/av_shd"
+    save_loc = home + "/data/av_shd_test"
     # Save each piece of data separately for easy loading later
     if not os.path.exists(save_loc):
         os.makedirs(save_loc)
