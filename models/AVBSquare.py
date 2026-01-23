@@ -197,11 +197,11 @@ class AVBSquare(nn.Module):
                     for data, target in qbar:
                         data = data.float().to(device)
                         target = target.long().to(device)
-                        print(data.shape)
                         output = classifier(data)
                         preds = output.argmax(dim=1)
                         correct += (preds == target.to(device)).sum().item()
                         total += target.size(0)
+                        qbar.set_postfix(acc=correct / total)
                 accuracy = 100 * correct / total
                 print(f"Classifier {c_idx+1}/{len(self.classifiers)} Epoch {epoch+1}/{epochs}, Test Accuracy: {accuracy:.2f}%")
 
