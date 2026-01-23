@@ -9,22 +9,21 @@ from random import shuffle
 import tqdm
 
 home = str(pathlib.Path.home())
-data_dir = home + "/data/av_shd"
+train_dir = home + "/data/av_shd_train"
+test_dir = home + "/data/av_shd_test"
 
 # Retrieve cached dataset saved at data_dir
-av_ds = SavedAVDataset(data_dir)
-print(av_ds[0][0][0].shape, av_ds[0][0][1].shape, av_ds[0][1])
+av_tr = SavedAVDataset(train_dir)
+av_te = SavedAVDataset(test_dir)
+print(av_tr[0][0][0].shape, av_tr[0][0][1].shape, av_tr[0][1])
 
 model = AVBSquare()
 print(model)
 
-av_ds.shuffle_data()
-tr_ub = int(0.8 * len(av_ds))
-tr_ds, te_ds = torch.utils.data.random_split(av_ds, [tr_ub, len(av_ds) - tr_ub])
-tr_ds_a = tr_ds.dataset.get_a_ds()
-te_ds_a = te_ds.dataset.get_a_ds()
-tr_ds_v = tr_ds.dataset.get_v_ds()
-te_ds_v = te_ds.dataset.get_v_ds()
+tr_ds_a = av_tr.get_a_ds()
+tr_ds_v = av_tr.get_v_ds()
+te_ds_a = av_te.get_a_ds()
+te_ds_v = av_te.get_v_ds()
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
