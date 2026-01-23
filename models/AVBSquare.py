@@ -195,6 +195,8 @@ class AVBSquare(nn.Module):
                 total = 0
                 with torch.no_grad():
                     for data, target in qbar:
+                        if target != classifier.c_1 and target != classifier.c_2:
+                            continue
                         data = data.float().to(device)
                         target = target.long().to(device)
                         output = classifier(data)
