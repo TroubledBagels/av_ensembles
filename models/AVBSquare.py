@@ -201,12 +201,40 @@ class AVBSquare(nn.Module):
                         target = target.long().to(device)
                         output = classifier(data)
                         preds = output.argmax(dim=1)
-                        correct += (preds == target.to(device)).sum().item()
+                        correct += (preds == target).sum().item()
                         total += target.size(0)
                         qbar.set_postfix(acc=correct / total)
                 accuracy = 100 * correct / total
                 print(f"Classifier {c_idx+1}/{len(self.classifiers)} Epoch {epoch+1}/{epochs}, Test Accuracy: {accuracy:.2f}%")
 
+    def retest_all_classifiers(self, te_ds_a, te_ds_v, device=torch.device("cpu")):
+        for c_idx, classifier in enumerate(self.classifiers):
+            if type(classifier) == AudioClassifier:
+                print(f"Retesting Audio Classifier {c_idx+1}/{len(self.classifiers)} for classes {classifier.c_1} vs {classifier.c_2}")
+                te_dl = torch.utils.data.DataLoader(te_ds_a, batch_size=1, shuffle=False)
+            else:
+                print(f"Retesting Video Classifier {c_idx+1}/{len(self.classifiers)} for classes {classifier.c_1} vs {classifier.c_2}")
+                te_dl = torch.utils.data.DataLoader(te_ds_v, batch_size=1, shuffle=False)
+
+            classifier.eval()
+            correct = 0
+            total = 0
+            with torch.no_grad():
+                for data, target in te_dl:
+                    if target != classifier.c_1 and target != classifier.c_2:
+                        continue
+                    data = data.float().to(device)
+                    target = target.long().to(device)
+                    output = classifier(data)
+                    preds = output.argmax(dim=1)
+                    if preds == 0:
+                        preds = classifier.c_1
+                    else:
+                        preds = classifier.c_2
+                    correct += (preds == target).sum().item()
+                    total += target.size(0)
+            accuracy = 100 * correct / total
+            print(f"Classifier {c_idx+1}/{len(self.classifiers)} Test Accuracy: {accuracy:.2f}%")
 
 if __name__ == '__main__':
     model = AudioClassifier(0, 1)

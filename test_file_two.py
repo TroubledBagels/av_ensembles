@@ -28,6 +28,9 @@ te_ds_v = av_te.get_v_ds()
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 model.to(device)
-model.train_classifiers(tr_ds_a, tr_ds_v, te_ds_a, te_ds_v, epochs=5, lr=1e-3, device=device)
 
-torch.save(model.state_dict(), f"./model_saves/av_bsquare.pth")
+model.load_state_dict(torch.load("./model_saves/av_bsquare.pth", map_location=device))
+model.retest_all_classifiers(te_ds_a, te_ds_v)
+# model.train_classifiers(tr_ds_a, tr_ds_v, te_ds_a, te_ds_v, epochs=5, lr=1e-3, device=device)
+
+# torch.save(model.state_dict(), f"./model_saves/av_bsquare.pth")

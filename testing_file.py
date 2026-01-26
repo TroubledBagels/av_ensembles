@@ -9,25 +9,23 @@ from random import shuffle
 import tqdm
 
 home = str(pathlib.Path.home())
-data_dir = home + "/data/av_shd"
+train_dir = home + "/data/av_shd_train"
+test_dir = home + "/data/av_shd_test"
 
 # Retrieve cached dataset saved at data_dir
-av_ds = SavedAVDataset(data_dir)
-print(av_ds[0][0][0].shape, av_ds[0][0][1].shape, av_ds[0][1])
+av_ds_tr = SavedAVDataset(train_dir)
+av_ds_te = SavedAVDataset(test_dir)
 
-model = VideoClassifier()
+tr_dl =  torch.utils.data.DataLoader(av_ds_tr, batch_size=1, shuffle=True)
+te_dl = torch.utils.data.DataLoader(av_ds_te, batch_size=1, shuffle=True)
+
+model = AudioClassifier(1, 2)
 print(model)
 
-av_ds.shuffle_data()
-tr_ub = int(0.8 * len(av_ds))
-tr_ds, te_ds = torch.utils.data.random_split(av_ds, [tr_ub, len(av_ds) - tr_ub])
-
-tr_dl = torch.utils.data.DataLoader(tr_ds, batch_size=1, shuffle=True)
-te_dl = torch.utils.data.DataLoader(te_ds, batch_size=1, shuffle=False)
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model.to(device)
-loss_fn = nn.CrossEntropyLoss()
+loss_fn = nn.KLDivLoss(reduction='batchmean')
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 num_epochs = 10
 
@@ -39,9 +37,16 @@ for epoch in range(num_epochs):
         data = [d.float().to(device) for d in data]
         target = target.long().to(device)
 
+        target_binary = torch.zeros(len(target), 2, device=device)
+        mask_c1 = (target == model.c_1)
+        mask_c2 = (target == model.c_2)
+        target_binary[mask_c1, 0] = 1.0
+        target_binary[mask_c2, 1] = 1.0
+
         optimizer.zero_grad()
-        output = model(data[1])
-        loss = loss_fn(output, target)
+        output = model(data[0])
+        output = nn.LogSoftmax(dim=1)(output)
+        loss = loss_fn(output, target_binary)
         loss.backward()
         optimizer.step()
 
@@ -56,9 +61,11 @@ for epoch in range(num_epochs):
     total = 0
     with torch.no_grad():
         for data, target in qbar:
+            if target != model.c_1 and target != model.c_2:
+                continue
             data = [d.float().to(device) for d in data]
             target = target.long().to(device)
-            output = model(data[1])
+            output = model(data[0])
             preds = output.argmax(dim=1)
             correct += (preds == target).sum().item()
             total += target.size(0)
