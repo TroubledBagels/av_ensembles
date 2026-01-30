@@ -4,6 +4,83 @@ from random import shuffle
 import torchvision.transforms as transforms
 import torchaudio.transforms as T
 import os
+import pathlib
+import torchvision
+import torchaudio
+
+class CREMADVideo(Dataset):
+    def __init__(self, video_dir, transform=None):
+        """
+        A dataset for loading video files from a directory.
+
+        Args:
+            video_dir (str): Path to the directory containing video files.
+            transform (callable, optional): Optional transform to be applied on a sample.
+        """
+        self.video_dir = video_dir
+        self.transform = transform
+        self.video_files = [f for f in os.listdir(video_dir) if f.endswith('.mp4')]
+
+    def __len__(self):
+        """
+        Returns the total number of video files in the dataset.
+        """
+        return len(self.video_files)
+
+    def __getitem__(self, idx):
+        """
+        Retrieves the video file at the specified index.
+
+        Args:
+            idx (int): The index of the video file to retrieve.
+
+        Returns:
+            The video data as a tensor.
+        """
+        video_path = os.path.join(self.video_dir, self.video_files[idx])
+        video_data, _, _ = torchvision.io.read_video(video_path, pts_unit='sec')
+
+        if self.transform:
+            video_data = self.transform(video_data)
+
+        return video_data, self.video_files[idx]
+
+class CREMADAudio(Dataset):
+    def __init__(self, audio_dir, transform=None):
+        """
+        A dataset for loading audio files from a directory.
+
+        Args:
+            audio_dir (str): Path to the directory containing audio files.
+            transform (callable, optional): Optional transform to be applied on a sample.
+        """
+        self.audio_dir = audio_dir
+        self.transform = transform
+        self.audio_files = [f for f in os.listdir(audio_dir) if f.endswith('.wav')]
+
+    def __len__(self):
+        """
+        Returns the total number of audio files in the dataset.
+        """
+        return len(self.audio_files)
+
+    def __getitem__(self, idx):
+        """
+        Retrieves the audio file at the specified index.
+
+        Args:
+            idx (int): The index of the audio file to retrieve.
+
+        Returns:
+            The audio data as a tensor.
+        """
+        audio_path = os.path.join(self.audio_dir, self.audio_files[idx])
+        waveform, sample_rate = torchaudio.load(audio_path)
+
+        if self.transform:
+            waveform = self.transform(waveform)
+
+        return waveform, self.audio_files[idx]
 
 class ListDataset(Dataset):
     def __init__(self, data_list):
@@ -125,10 +202,9 @@ class SavedAVDataset(Dataset):
             v_data.append((v, label))
         return ListDataset(v_data)
 
-if __name__ == '__main__':
+def create_av_shd_dataset():
     import tonic
     from tonic.datasets import hsd, nmnist
-    import pathlib
 
     home = str(pathlib.Path.home())
     ds_path_hsd = home + "/data/shd"
@@ -198,3 +274,48 @@ if __name__ == '__main__':
             print(f"\rSaved {idx/len(av_ds)} AV data samples", end="")
     print()
     print(f"Saved AV dataset to {save_loc}")
+
+def save_crema_d_video_tensors():
+    home = str(pathlib.Path.home())
+    video_loc = pathlib.Path.home() / "data" / "crema-d-mirror" / "MP4Video"
+    crema_ds = CREMADVideo(str(video_loc))
+    print(f"CREMA-D Video Dataset size: {len(crema_ds)}")
+
+    save_loc = home + "/data/CREMA_D/video_tensors"
+    if not os.path.exists(save_loc):
+        os.makedirs(save_loc)
+    for idx in range(len(crema_ds)):
+        video_data, video_name = crema_ds[idx]
+        torch.save(video_data, os.path.join(save_loc, f"{video_name.split('.')[0]}.pt"))
+        if (idx + 1) % 100 == 0 or idx == len(crema_ds)-1:
+            print(f"\rSaved {idx+1}/{len(crema_ds)} video tensors", end="")
+    print()
+    print(f"Saved CREMA-D video tensors to {save_loc}")
+
+def save_crema_d_audio_tensors():
+    a_transform = transforms.Compose([
+        T.MelSpectrogram(sample_rate=16000, n_mels=64)
+    ])
+
+    home = str(pathlib.Path.home())
+    audio_loc = pathlib.Path.home() / "data" / "crema-d-mirror" / "AudioWAV"
+    crema_ds = CREMADAudio(str(audio_loc), transform=a_transform)
+    print(f"CREMA-D Audio Dataset size: {len(crema_ds)}")
+    save_loc = home + "/data/CREMA_D/audio_tensors"
+    if not os.path.exists(save_loc):
+        os.makedirs(save_loc)
+    for idx in range(len(crema_ds)):
+        audio_data, audio_name = crema_ds[idx]
+        torch.save(audio_data, os.path.join(save_loc, f"{audio_name.split('.')[0]}.pt"))
+        if (idx + 1) % 100 == 0 or idx == len(crema_ds)-1:
+            print(f"\rSaved {idx+1}/{len(crema_ds)} audio tensors", end="")
+    print()
+    print(f"Saved CREMA-D audio tensors to {save_loc}")
+
+if __name__ == "__main__":
+    # Uncomment the following lines to create datasets
+    # create_av_shd_dataset()
+    # save_crema_d_video_tensors()
+    # save_crema_d_audio_tensors()
+    pass
+

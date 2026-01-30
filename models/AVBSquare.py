@@ -3,6 +3,7 @@ import torch.nn as nn
 import snntorch as snn
 import snntorch.surrogate as sur
 import tqdm
+import numpy as np
 
 class AudioClassifier(nn.Module):
     def __init__(self, c_1, c_2):
@@ -22,7 +23,7 @@ class AudioClassifier(nn.Module):
         self.fc2 = nn.Linear(32, 2)
         self.lif4 = snn.Leaky(beta=0.9, spike_grad=self.sur_grad)
 
-    def forward(self, x):
+    def forward(self, x, train=False):
         B, T, C, L = x.size()  # B: batch size, T: time steps, C: channels, L: length
         mem1 = self.lif1.init_leaky()
         mem2 = self.lif2.init_leaky()
@@ -42,8 +43,14 @@ class AudioClassifier(nn.Module):
             spk3, mem3 = self.lif3(x_t, mem3)
             x_t = self.fc2(spk3)
             spk4, mem4 = self.lif4(x_t, mem4)
-            outs.append(mem4)
-        x = torch.stack(outs, dim=0).mean(dim=0)  # Average over time steps
+            if train:
+                outs.append(mem4)
+            else:
+                outs.append(spk4)
+        if train:
+            x = torch.stack(outs, dim=0).mean(dim=0)  # Average over time steps
+        else:
+            x = torch.stack(outs, dim=0).sum(dim=0)  # Sum over time steps
         return x
 
 class VideoClassifier(nn.Module):
@@ -63,7 +70,7 @@ class VideoClassifier(nn.Module):
         self.fc2 = nn.Linear(32, 2)
         self.lif4 = snn.Leaky(beta=0.9, spike_grad=sur.atan())
 
-    def forward(self, x):
+    def forward(self, x, train=False):
         B, T, C, H, W = x.size()  # B: batch size, T: time steps, C: channels, H: height, W: width
         mem1 = self.lif1.init_leaky()
         mem2 = self.lif2.init_leaky()
@@ -83,8 +90,14 @@ class VideoClassifier(nn.Module):
             spk3, mem3 = self.lif3(x_t, mem3)
             x_t = self.fc2(spk3)
             spk4, mem4 = self.lif4(x_t, mem4)
-            outs.append(mem4)
-        x = torch.stack(outs, dim=0).mean(dim=0)  # Average over time steps
+            if train:
+                outs.append(mem4)
+            else:
+                outs.append(spk4)
+        if train:
+            x = torch.stack(outs, dim=0).mean(dim=0)  # Average over time steps
+        else:
+            x = torch.stack(outs, dim=0).sum(dim=0)  # Sum over time steps
         return x
 
 
@@ -102,7 +115,7 @@ class AVBSquare(nn.Module):
         B_a, T_a, C_a, L_a = x_audio.size()
         B_v, T_v, C_v, H_v, W_v = x_video.size()
         assert B_a == B_v, "Batch sizes of audio and video must match"
-        out_mat = torch.zeros(B_a, self.num_classes, self.num_classes, device=x_audio.device)
+        out_mat = torch.zeros(B_a, self.num_classes * 2, self.num_classes, device=x_audio.device)
         votes = torch.zeros(B_a, self.num_classes, device=x_audio.device)
         if x_audio.device == "cuda":
             torch.cuda.empty_cache()
@@ -114,10 +127,13 @@ class AVBSquare(nn.Module):
                 with torch.cuda.stream(streams[idx]):
                     if isinstance(classifier, AudioClassifier):
                         out = classifier(x_audio)
-                        out_mat[:, classifier.c_1, classifier.c_2] = out[:, 0] - out[:, 1]
+                        # store in out_mat the output spike values for class c_1 at (c_1, c_2) and for c_2 at (c_1 + 1, c_2)
+                        out_mat[:, 2*classifier.c_1, classifier.c_2] = out[:, 0]
+                        out_mat[:, 2*classifier.c_1 + 1, classifier.c_2] = out[:, 1]
                     else:
                         out = classifier(x_video)
-                        out_mat[:, classifier.c_2, classifier.c_1] = out[:, 1] - out[:, 0]
+                        out_mat[:, 2*classifier.c_2, classifier.c_1] = out[:, 1]
+                        out_mat[:, 2*classifier.c_2 + 1, classifier.c_1] = out[:, 0]
                     preds = out.argmax(dim=1)
                     c_1 = classifier.c_1
                     c_2 = classifier.c_2
@@ -134,8 +150,13 @@ class AVBSquare(nn.Module):
             for classifier in self.classifiers:
                 if isinstance(classifier, AudioClassifier):
                     out = classifier(x_audio)
+                    # store in out_mat the output spike values for class c_1 at (c_1, c_2) and for c_2 at (c_1 + 1, c_2)
+                    out_mat[:, 2 * classifier.c_1, classifier.c_2] = out[:, 0]
+                    out_mat[:, 2 * classifier.c_1 + 1, classifier.c_2] = out[:, 1]
                 else:
                     out = classifier(x_video)
+                    out_mat[:, 2 * classifier.c_2, classifier.c_1] = out[:, 1]
+                    out_mat[:, 2 * classifier.c_2 + 1, classifier.c_1] = out[:, 0]
                 preds = out.argmax(dim=1)
                 c_1 = classifier.c_1
                 c_2 = classifier.c_2
@@ -179,7 +200,7 @@ class AVBSquare(nn.Module):
                     target_binary[mask_c2, 1] = 1.0
 
                     optimisers[c_idx].zero_grad()
-                    output = classifier(data)
+                    output = classifier(data, True)
                     output = nn.LogSoftmax(dim=1)(output)
                     loss = loss_fn(output, target_binary)
                     loss.backward()
@@ -208,6 +229,16 @@ class AVBSquare(nn.Module):
                 print(f"Classifier {c_idx+1}/{len(self.classifiers)} Epoch {epoch+1}/{epochs}, Test Accuracy: {accuracy:.2f}%")
 
     def retest_all_classifiers(self, te_ds_a, te_ds_v, device=torch.device("cpu")):
+        max_class = -1
+        for classifier in self.classifiers:
+            if classifier.c_1 > max_class:
+                max_class = classifier.c_1
+            if classifier.c_2 > max_class:
+                max_class = classifier.c_2
+        max_class += 1
+
+        acc_mat = np.zeros((max_class, max_class))
+
         for c_idx, classifier in enumerate(self.classifiers):
             if type(classifier) == AudioClassifier:
                 print(f"Retesting Audio Classifier {c_idx+1}/{len(self.classifiers)} for classes {classifier.c_1} vs {classifier.c_2}")
@@ -235,6 +266,45 @@ class AVBSquare(nn.Module):
                     total += target.size(0)
             accuracy = 100 * correct / total
             print(f"Classifier {c_idx+1}/{len(self.classifiers)} Test Accuracy: {accuracy:.2f}%")
+            if type(classifier) == AudioClassifier:
+                acc_mat[classifier.c_1, classifier.c_2] = accuracy
+            else:
+                acc_mat[classifier.c_2, classifier.c_1] = accuracy
+        return acc_mat
+
+    def run_test_ds_vote(self, te_ds, device=torch.device("cpu")):
+        te_dl = torch.utils.data.DataLoader(te_ds, batch_size=1, shuffle=False)
+        correct = 0
+        total = 0
+        self.eval()
+        with torch.no_grad():
+            pbar = tqdm.tqdm(te_dl)
+            for data, target in pbar:
+                data_a = data[0].float().to(device)
+                data_v = data[1].float().to(device)
+                target = target.long().to(device)
+                votes, _ = self(data_a, data_v)
+                preds = votes.argmax(dim=1)
+                correct += (preds == target).sum().item()
+                total += target.size(0)
+                pbar.set_postfix(accuracy=correct / total)
+        accuracy = 100 * correct / total
+        print(f"Overall Test Accuracy: {accuracy:.2f}%")
+
+class OutLayer(nn.Module):
+    def __init__(self, input_size, num_classes):
+        super(OutLayer, self).__init__()
+        self.fc = nn.Linear(input_size, num_classes)
+        # self.lif = snn.Leaky(beta=0.9, spike_grad=sur.atan())
+
+    def forward(self, x):
+        x = self.fc(x)
+        return x, None
+        # x, mem = self.lif(x)
+        # return x, mem
+
+    # def reset_mem(self):
+    #     self.lif.reset_mem()
 
 if __name__ == '__main__':
     model = AudioClassifier(0, 1)
