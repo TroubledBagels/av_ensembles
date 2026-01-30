@@ -50,12 +50,15 @@ class VideoClassifier(nn.Module):
         self.conv_block = nn.Sequential(
             nn.Conv2d(in_channels=3, out_channels=16, kernel_size=7, stride=3, padding=1),
             nn.ReLU(),
+            nn.Dropout(0.2),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=0),
             nn.Conv2d(in_channels=16, out_channels=32, kernel_size=5, stride=2, padding=1),
             nn.ReLU(),
+            nn.Dropout(0.2),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=0),
             nn.Conv2d(in_channels=32, out_channels=32, kernel_size=5, stride=2, padding=1),
             nn.ReLU(),
+            nn.Dropout(0.2),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
         )
         self.lstm = nn.LSTM(input_size=128, hidden_size=128, num_layers=2, batch_first=True)
@@ -66,8 +69,6 @@ class VideoClassifier(nn.Module):
         B, T, C, H, W = x.size()
         x = x.view(B * T, C, H, W)  # Merge batch and time
         x = self.conv_block(x)
-        print(x.shape)
-        print(B, T, C, H, W)
         x = x.reshape(B, T, -1)  # Reshape for LSTM
         h0 = torch.zeros(2, B, 128).to(x.device)
         c0 = torch.zeros(2, B, 128).to(x.device)
