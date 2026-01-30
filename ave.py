@@ -7,6 +7,16 @@ import os
 import tqdm
 from torchvision import transforms
 import torchaudio
+import argparse
+
+parser = argparse.ArgumentParser(description="Train AVE Classifier")
+parser.add_argument('--mode', type=str, choices=['audio', 'video'], default='video',
+                    help='Choose to train audio or video classifier')
+parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate for optimizer')
+parser.add_argument('--epochs', type=int, default=10, help='Number of training epochs')
+parser.add_argument('--batch_size', type=int, default=1, help='Batch size for training')
+parser.add_argument('--classes', type=int, nargs=2, default=[0, 1],)
+args = parser.parse_args()
 
 home = str(pathlib.Path.home())
 data_dir = os.path.join(home, 'data', 'AVE_Dataset')
@@ -23,28 +33,39 @@ v_transform = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
+classes = args.classes
+lr = args.lr
+num_epochs = args.epochs
+batch_size = args.batch_size
+
+if args.mode == 'audio':
+    av_ds = AVEAudio(ds_dir=data_dir, transform=a_transform, dstype=DSType.TRAIN_VAL)  # type=2 for train/val set
+    av_ds_te = AVEAudio(ds_dir=data_dir, transform=a_transform, dstype=DSType.TEST)  # type=4 for test set
+    model = AudioClassifier(classes[0], classes[1])
+    batch_size = 1
+else:
+    av_ds = AVEVideo(ds_dir=data_dir, dstype=DSType.TRAIN_VAL, transform=v_transform)  # type=2 for train/val set
+    av_ds_te = AVEVideo(ds_dir=data_dir, dstype=DSType.TEST, transform=v_transform)  # type=4 for test set
+    model = VideoClassifier(classes[0], classes[1])
 # av_ds = AVEAudio(ds_dir=data_dir, transform=a_transform, dstype=DSType.TRAIN_VAL)  # type=2 for train/val set
 # av_ds_te = AVEAudio(ds_dir=data_dir, transform=a_transform, dstype=DSType.TEST)  # type=4 for test set
-av_ds = AVEVideo(ds_dir=data_dir, dstype=DSType.TRAIN_VAL, transform=v_transform)  # type=2 for train/val set
-av_ds_te = AVEVideo(ds_dir=data_dir, dstype=DSType.TEST, transform=v_transform)  # type=4 for test set
+# av_ds = AVEVideo(ds_dir=data_dir, dstype=DSType.TRAIN_VAL, transform=v_transform)  # type=2 for train/val set
+# av_ds_te = AVEVideo(ds_dir=data_dir, dstype=DSType.TEST, transform=v_transform)  # type=4 for test set
 print(f"Dataset size: {len(av_ds)}")
 
-classes = [0, 1]
+
 
 av_ds.trim_classes(classes)
 av_ds_te.trim_classes(classes)
-av_dl = torch.utils.data.DataLoader(av_ds, batch_size=1, shuffle=True)
-av_dl_te = torch.utils.data.DataLoader(av_ds_te, batch_size=1, shuffle=False)
-
-model = VideoClassifier(classes[0], classes[1])
+av_dl = torch.utils.data.DataLoader(av_ds, batch_size=batch_size, shuffle=True)
+av_dl_te = torch.utils.data.DataLoader(av_ds_te, batch_size=batch_size, shuffle=False)
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 model.to(device)
 model.train()
 loss_fn = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-num_epochs = 10
+optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 for epoch in range(num_epochs):
     pbar = tqdm.tqdm(av_dl)
     total_loss = 0
