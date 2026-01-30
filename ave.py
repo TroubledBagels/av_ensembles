@@ -67,6 +67,7 @@ model.train()
 loss_fn = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 for epoch in range(num_epochs):
+    model.train()
     pbar = tqdm.tqdm(av_dl)
     total_loss = 0
     correct = 0
