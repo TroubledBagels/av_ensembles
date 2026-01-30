@@ -68,7 +68,7 @@ class VideoClassifier(nn.Module):
         x = self.conv_block(x)
         print(x.shape)
         print(B, T, C, H, W)
-        x = x.view(B, T, -1)  # Reshape for LSTM
+        x = x.reshape(B, T, -1)  # Reshape for LSTM
         h0 = torch.zeros(2, B, 128).to(x.device)
         c0 = torch.zeros(2, B, 128).to(x.device)
         out, _ = self.lstm(x, (h0, c0))

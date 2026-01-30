@@ -14,7 +14,7 @@ parser.add_argument('--mode', type=str, choices=['audio', 'video'], default='vid
                     help='Choose to train audio or video classifier')
 parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate for optimizer')
 parser.add_argument('--epochs', type=int, default=10, help='Number of training epochs')
-parser.add_argument('--batch_size', type=int, default=1, help='Batch size for training')
+parser.add_argument('--batch_size', type=int, default=8, help='Batch size for training')
 parser.add_argument('--classes', type=int, nargs=2, default=[0, 1],)
 args = parser.parse_args()
 
